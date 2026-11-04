@@ -3,12 +3,14 @@
 Telefon ve tablet için yapılmış, çevrimdışı çalışabilen bir İspanyolca öğrenme uygulaması (PWA). Arayüz İngilizce.
 
 ## İçerik
-- **5 seviye, 40 ders** (A1: 10, A2: 8, B1: 8, B2: 7, C1: 7). Her derste 12 kelime, bir dilbilgisi notu, boşluk doldurma ve örnek cümleler var.
-- **Alıştırma türleri:** çoktan seçmeli, dinleme, kelime eşleştirme, boşluk doldurma, cümle kurma, dinleyip cümle kurma, yazma (aksan klavyesiyle) ve konuşma (mikrofonla; Chrome/Android).
-- **Tekrar:** aralıklı tekrar sistemi (Leitner). Öğrenilen kelimeler doğru zamanda tekrar karşına çıkar.
-- **Okuma:** 12 metin. A1–B2 için uygulamaya özel yazılmış metinler, B2–C1 için telif hakkı süresi dolmuş gerçek edebiyat: Antonio Machado ("Caminante, no hay camino"), Bécquer (Rima XXI, XXIII, LIII), Cervantes (Don Quijote, 1. bölüm). Her metinde sesli okuma, kelimeye dokununca anlamı, İngilizce çeviri ve anlama testi var.
-- **Sözlük:** 480 kelime ve ifade; arama ve seviye filtresi.
-- **Profil:** XP, seri (streak), haftalık grafik, seviye testi, günlük hedef, ses hızı ve ses seçimi, tema (açık/koyu), ilerlemeyi dışa/içe aktarma.
+- **Kurs:** 5 seviye, **77 ders** (A1: 17, A2: 16, B1: 16, B2: 14, C1: 14). Instituto Cervantes müfredatındaki dilbilgisi konularını kapsar. Her derste kelimeler, dilbilgisi notu, boşluk doldurma ve örnek cümleler var.
+- **Alıştırma türleri:** çoktan seçmeli, dinleme, eşleştirme, boşluk doldurma, cümle kurma, yazma (aksan klavyeli), konuşma (mikrofon).
+- **Fiil çekimi:** kurallarla çalışan bir çekim motoru. 400 fiil, 16 zaman kipi; düzensiz fiiller, kök değişimleri ve dönüşlü emir kipleri dahil (144 test formu doğrulandı). Tam tablolar ve zamana göre fiil alıştırmaları var.
+- **Kelime:** derslerle birlikte ~2.000 kelime; 36 tematik deste var ve öğrenilen her şey aralıklı tekrara (spaced repetition) eklenir.
+- **Kütüphane:** 34 okuma metni (A1–B2 için özgün metinler + Cervantes, Lazarillo, Bécquer, Machado, Martí, Darío, Storni, Lorca, Quiroga, Clarín'den telif hakkı bitmiş eserler), 20 iki sesli diyalog ve aranabilir dilbilgisi başvurusu.
+- **Pratik:** dikte, çeviri, sayılar/fiyat/yıl/saat dinleme, telaffuz rehberi, minimal çiftler testi, tekerlemeler, örnek cevaplı 14 yazma görevi.
+- **Sınavlar:** her seviye için 30 soruluk sınav; %70 ile geçince yazdırılabilir sertifika. Ayrıca seviye tespit sınavı ve rozetler var.
+- **Profil:** XP, seri, haftalık grafik, ses hızı ve iki ses seçimi, tema, ilerlemeyi dışa/içe aktarma.
 
 Telaffuz için cihazın kendi metin-okuma (TTS) motoru kullanılır. Ses çıkmazsa cihaz ayarlarından İspanyolca bir ses paketi yükle.
 
@@ -38,9 +40,11 @@ Sonra:
 ```
 index.html              uygulama iskeleti
 css/style.css           mobil öncelikli tasarım, tablet düzeni, koyu tema
-js/app.js               uygulama motoru (dersler, tekrar, okuma, profil)
-js/data/a1.js … c1.js   ders içerikleri
-js/data/readings.js     okuma metinleri
+js/app.js               uygulama motoru (dersler, alıştırmalar, kütüphane, profil)
+js/conj.js              fiil çekim motoru
+js/data/a1.js … c1.js   ilk 40 ders; extra-a/b/c.js: ek 37 ders + ders sırası
+js/data/vocab-*.js      tematik kelime desteleri;  verbs.js: fiil listesi
+js/data/readings*.js    okuma metinleri;  dialogues.js, writing.js, pron.js
 sw.js                   çevrimdışı önbellek (service worker)
 manifest.webmanifest    PWA tanımı, icons/  uygulama simgeleri
 ```

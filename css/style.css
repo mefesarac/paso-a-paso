@@ -363,3 +363,37 @@ table.g th { background: var(--card-2); font-size: .82rem; text-transform: upper
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ---------- v2 components ---------- */
+.tabs a { flex: 1; padding: 10px 12px; border-radius: 10px; font-weight: 700; white-space: nowrap; color: var(--muted); text-align: center; }
+.tabs a.on { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+.chips .chip { cursor: pointer; }
+textarea.text-in { resize: vertical; font-family: inherit; line-height: 1.5; }
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::after { content: '▾'; float: right; color: var(--muted); }
+details[open] > summary::after { content: '▴'; }
+a.word { color: inherit; }
+table.g.conj td { padding: 6px 8px; }
+.formbtn { font-weight: 700; padding: 2px 6px; border-radius: 6px; text-align: left; }
+.formbtn:active { background: rgba(28, 143, 214, .18); }
+.chat { display: flex; flex-direction: column; gap: 10px; transition: filter .3s; }
+.chat.blur .es, .chat.blur .who { filter: blur(6px); user-select: none; }
+.bubble { position: relative; max-width: 85%; padding: 10px 52px 10px 14px; border-radius: 18px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow); }
+.bubble.left { align-self: flex-start; border-bottom-left-radius: 6px; }
+.bubble.right { align-self: flex-end; background: rgba(28, 143, 214, .1); border-bottom-right-radius: 6px; }
+.bubble.playing { outline: 3px solid var(--accent); }
+.bubble .who { font-size: .75rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.bubble .es { font-size: 1.05rem; font-weight: 600; }
+.bubble .en { color: var(--muted); font-size: .9rem; margin-top: 4px; }
+.bubble .speak { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; font-size: 1rem; }
+.badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.badge-card { text-align: center; padding: 12px 8px; }
+.badge-card.off { opacity: .4; filter: grayscale(1); }
+.cert { text-align: center; padding: 40px 24px; border-radius: 24px; background: var(--card); border: 6px double var(--accent); box-shadow: var(--shadow); max-width: 640px; margin: 0 auto; }
+@media print {
+  #nav, .noprint, #toast { display: none !important; }
+  body { background: #fff; }
+  #view { padding: 0 !important; }
+  .cert { box-shadow: none; margin-top: 40px; }
+}
