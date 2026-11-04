@@ -3,16 +3,19 @@
 Telefon ve tablet için yapılmış, çevrimdışı çalışabilen bir İspanyolca öğrenme uygulaması (PWA). Arayüz İngilizce.
 
 ## İçerik
-- **Kurs:** 5 seviye, **77 ders** (A1: 17, A2: 16, B1: 16, B2: 14, C1: 14). Instituto Cervantes müfredatındaki dilbilgisi konularını kapsar. Her derste kelimeler, dilbilgisi notu, boşluk doldurma ve örnek cümleler var.
-- **Alıştırma türleri:** çoktan seçmeli, dinleme, eşleştirme, boşluk doldurma, cümle kurma, yazma (aksan klavyeli), konuşma (mikrofon).
-- **Fiil çekimi:** kurallarla çalışan bir çekim motoru. 400 fiil, 16 zaman kipi; düzensiz fiiller, kök değişimleri ve dönüşlü emir kipleri dahil (144 test formu doğrulandı). Tam tablolar ve zamana göre fiil alıştırmaları var.
-- **Kelime:** derslerle birlikte ~2.000 kelime; 36 tematik deste var ve öğrenilen her şey aralıklı tekrara (spaced repetition) eklenir.
-- **Kütüphane:** 34 okuma metni (A1–B2 için özgün metinler + Cervantes, Lazarillo, Bécquer, Machado, Martí, Darío, Storni, Lorca, Quiroga, Clarín'den telif hakkı bitmiş eserler), 20 iki sesli diyalog ve aranabilir dilbilgisi başvurusu.
-- **Pratik:** dikte, çeviri, sayılar/fiyat/yıl/saat dinleme, telaffuz rehberi, minimal çiftler testi, tekerlemeler, örnek cevaplı 14 yazma görevi.
+- **Kurs:** 5 seviye, **77 ders** (A1: 17, A2: 16, B1: 16, B2: 14, C1: 14), Instituto Cervantes müfredatını kapsıyor. Toplam **1.078 boşluk doldurma** sorusu ve **731 örnek cümle** var. Ders başına 14–20 alıştırma rastgele seçildiği için tekrarlarda aynı sorular gelmiyor.
+- **Hata defteri:** gramer, cümle ve fiil sorularında yanlış yaptıkların deftere eklenir; iki kez doğru cevaplayınca silinir.
+- **Kelime:** **4.000'den fazla kelime ve ifade** (ders kelimeleri + 71 deste). Temel desteler bir kelime sıklığı listesine göre seçildi. Öğrenilen her şey aralıklı tekrara (spaced repetition) eklenir.
+- **Fiil çekimi:** kurallarla çalışan bir motor; **712 fiil**, 16 zaman kipi, düzensiz fiiller ve dönüşlü emir kipleri dahil (144 test formu doğrulandı). Tam tablolar ve fiil alıştırmaları var.
+- **Kütüphane:** **40 okuma metni**. Bunlar seviyeye göre yazılmış metinler, B2–C1 için uzun makaleler, ve Cervantes, Lazarillo, Bécquer, Machado, Martí, Darío, Storni, Lorca, Quiroga ve Clarín'den telif süresi dolmuş eserler. Ayrıca 20 iki sesli diyalog, gramer başvurusu ve gerçek İspanyolca kaynakları (podcast, radyo, gazete, sözlük) için bağlantılar var.
+- **Pratik:** dikte, çeviri, sayı/fiyat/yıl/saat dinleme, telaffuz rehberi, benzer kelimeleri ayırt etme testi, tekerlemeler, örnek cevaplı 14 yazma görevi, okuma ve dinleme hız ayarı.
+- **AI öğretmen (isteğe bağlı):** kendi Claude API anahtarınla (Anthropic) metinlerini ayrıntılı düzelttirebilir, 14 senaryoda sesli ya da yazılı sohbet edebilirsin. Anahtar sadece cihazında saklanır ve yalnızca api.anthropic.com'a gönderilir; kullanım ücreti Anthropic hesabına yansır.
 - **Sınavlar:** her seviye için 30 soruluk sınav; %70 ile geçince yazdırılabilir sertifika. Ayrıca seviye tespit sınavı ve rozetler var.
-- **Profil:** XP, seri, haftalık grafik, ses hızı ve iki ses seçimi, tema, ilerlemeyi dışa/içe aktarma.
+- **Hata bildirme:** derslerde, metinlerde ve sorularda "⚑ Report" bağlantısı var; GitHub'da hazır doldurulmuş bir hata kaydı açar.
 
 Telaffuz için cihazın kendi metin-okuma (TTS) motoru kullanılır. Ses çıkmazsa cihaz ayarlarından İspanyolca bir ses paketi yükle.
+
+**Kaynaklar ve lisanslar:** Temel kelime destelerindeki kelime seçimi [hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords) sıklık listesinden yararlanır (içerik CC BY-SA 4.0). Edebi metinler Wikisource ve Project Gutenberg'den alındı ve telif süreleri dolmuştur. Çeviriler, açıklamalar ve diğer içerikler bu uygulama için yazıldı.
 
 ## Çalıştırma
 Bilgisayarda:

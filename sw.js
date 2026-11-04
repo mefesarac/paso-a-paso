@@ -1,7 +1,13 @@
-const CACHE = 'pasoapaso-v2';
+const CACHE = 'pasoapaso-v3';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
-  'js/data/a1.js', 'js/data/a2.js', 'js/data/b1.js', 'js/data/b2.js', 'js/data/c1.js', 'js/data/extra-a.js', 'js/data/extra-b.js', 'js/data/extra-c.js', 'js/data/vocab-1.js', 'js/data/vocab-2.js', 'js/data/verbs.js', 'js/data/readings.js', 'js/data/readings2.js', 'js/data/dialogues.js', 'js/data/writing.js', 'js/data/pron.js', 'js/conj.js', 'js/app.js',
+  'js/data/a1.js', 'js/data/a2.js', 'js/data/b1.js', 'js/data/b2.js',
+  'js/data/c1.js', 'js/data/extra-a.js', 'js/data/extra-b.js', 'js/data/extra-c.js',
+  'js/data/practice-a.js', 'js/data/practice-b.js', 'js/data/practice-c.js', 'js/data/vocab-1.js',
+  'js/data/vocab-2.js', 'js/data/vocab-3.js', 'js/data/vocab-4.js', 'js/data/vocab-5.js',
+  'js/data/vocab-6.js', 'js/data/verbs.js', 'js/data/readings.js', 'js/data/readings2.js', 'js/data/readings3.js',
+  'js/data/dialogues.js', 'js/data/writing.js', 'js/data/pron.js', 'js/conj.js',
+  'js/tutor.js', 'js/app.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'
 ];
 self.addEventListener('install', e => {

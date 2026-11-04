@@ -26,10 +26,12 @@
     L.units.push(...x.units);
     if (x.order) { const by = Object.fromEntries(L.units.map(u => [u.id, u])); L.units = x.order.map(id => by[id]).filter(Boolean).concat(L.units.filter(u => !x.order.includes(u.id))); }
   });
+  const PX = window.PRACTICE_EXTRA || {};
   LEVELS.forEach((L, li) => {
     L.idx = li;
     L.units.forEach((u, i) => {
       u.idx = i; u.L = L; UNITS[u.id] = u;
+      if (PX[u.id]) { u.fill = u.fill.concat(PX[u.id].fill || []); u.sents = u.sents.concat(PX[u.id].sents || []); }
       u.words.forEach(([es, en]) => { if (!WORDS[es]) WORDS[es] = { es, en, unit: u.id, level: L.id }; });
     });
   });
@@ -51,7 +53,7 @@
   /* ================= state ================= */
   const KEY = 'pasoapaso_v1';
   const DEF = {
-    xp: 0, streak: 0, best: 0, lastDay: null, goal: 30, days: {}, done: {}, srs: {}, reads: {}, dialogs: {}, exams: {}, writing: {},
+    xp: 0, streak: 0, best: 0, lastDay: null, goal: 30, days: {}, done: {}, srs: {}, reads: {}, dialogs: {}, exams: {}, writing: {}, mistakes: {},
     placement: null, name: '', stats: { conj: 0, dict: 0, speak: 0, trans: 0 },
     drill: { tenses: ['pres'], level: 'a2', irregular: false },
     settings: { rate: 0.9, voice: '', voice2: '', sound: true, autoplay: true, speak: true, unlock: false, theme: 'auto' }
@@ -85,6 +87,17 @@
   }
   const learned = () => Object.keys(S.srs).filter(k => WORDS[k]);
   const dueWords = () => Object.entries(S.srs).filter(([k, v]) => WORDS[k] && v.d <= Date.now()).sort((a, b) => a[1].d - b[1].d).map(([k]) => k);
+
+  /* mistake notebook: fill-in, sentence and verb items answered wrongly come back until fixed twice */
+  function mistakeGrade(k, ok, reviewing) {
+    const m = S.mistakes[k];
+    if (!ok) S.mistakes[k] = { n: (m ? m.n : 0) + 1, ok: 0, t: Date.now() };
+    else if (m && reviewing) { m.ok++; if (m.ok >= 2) delete S.mistakes[k]; }
+    save();
+  }
+  const REPO = 'https://github.com/mefesarac/paso-a-paso';
+  const reportUrl = where => `${REPO}/issues/new?title=${encodeURIComponent('Content error: ' + where.slice(0, 90))}&body=${encodeURIComponent(`Where: ${where}\n\nWhat is wrong:\n\nWhat it should be (if you know):\n`)}`;
+  const qSummary = q => q.q || q.es || q.prompt || (q.verb ? `${q.verb} · ${q.tense} · ${q.person}` : q.type);
 
   const unlocked = u => S.settings.unlock || u.idx === 0 || !!S.done[u.L.units[u.idx - 1].id];
   const levelDone = L => L.units.filter(u => S.done[u.id]).length;
@@ -291,15 +304,17 @@
   const qListen = (w, pool, srs) => ({ type: 'mc', label: 'What do you hear?', listen: true, say: w.es, answer: w.es, options: [w.es, ...others(w, pool, 'es', 3)], extra: w.en, srs });
   const qType = (w, srs) => ({ type: 'type', prompt: w.en, answer: w.es, srs });
   const qMatch = ws => ({ type: 'match', pairs: ws });
-  function qFill(f, L, level) {
+  function qFill(f, L, level, u) {
     const [q, a, o, tr] = f;
-    return { type: 'fill', q, a, o, tr, typed: L.idx >= 2 && Math.random() < 0.4, level };
+    const mk = u ? `f|${u.id}|${u.fill.indexOf(f)}` : undefined;
+    return { type: 'fill', q, a, o, tr, typed: L.idx >= 2 && Math.random() < 0.4, level, mk };
   }
-  function qOrder(s, all, listen) {
+  function qOrder(s, all, listen, u) {
     const [es, en] = s, target = tokens(es);
+    const mk = u ? `o|${u.id}|${u.sents.indexOf(s)}` : undefined;
     const low = new Set(target.map(t => t.toLowerCase()));
     const extra = sample(uniq(all.filter(x => x[0] !== es).flatMap(x => tokens(x[0])).filter(t => !low.has(t.toLowerCase()))), target.length > 8 ? 2 : 3);
-    return { type: 'order', es, en, listen, target, tiles: shuffle([...target, ...extra]) };
+    return { type: 'order', es, en, listen, target, tiles: shuffle([...target, ...extra]), mk };
   }
   const qSentMC = (s, all) => ({ type: 'mc', label: 'What does this sentence mean?', prompt: s[0], say: s[0], answer: s[1], options: [s[1], ...sample(all.filter(x => x[1] !== s[1]).map(x => x[1]), 2)] });
   const qListenSent = (s, all) => ({ type: 'mc', label: 'Listen: what does it mean?', listen: true, say: s[0], answer: s[1], options: [s[1], ...sample(all.filter(x => x[1] !== s[1]).map(x => x[1]), 2)], extra: s[0] });
@@ -307,13 +322,13 @@
   const qDict = s => ({ type: 'dict', es: s[0], en: s[1] });
   const qTrans = s => ({ type: 'trans', es: s[0], en: s[1] });
   const DRILL_EXCL = new Set(['gustar', 'doler', 'encantar', 'interesar', 'molestar', 'llover', 'nevar', 'soler', 'amanecer', 'acontecer', 'concernir']);
-  function qConj(x, tk) {
+  function qConj(x, tk, pFixed) {
     const c = conjOf(x), imp = TENSE[tk].imp;
-    let p = imp ? 1 + Math.floor(Math.random() * 5) : Math.floor(Math.random() * 6);
+    let p = pFixed ?? (imp ? 1 + Math.floor(Math.random() * 5) : Math.floor(Math.random() * 6));
     if (x.v === 'haber' && imp) tk = 'pres';
     const ans = c[tk][p];
     const person = (TENSE[tk].imp ? Conj.IMP_PERSONS : Conj.PERSONS)[p];
-    return { type: 'conj', verb: x.v, en: x.en, tense: tk, person, answer: ans };
+    return { type: 'conj', verb: x.v, en: x.en, tense: tk, person, answer: ans, mk: `c|${x.v}|${tk}|${p}` };
   }
 
   function wordsOf(units) { return units.flatMap(u => u.words.map(([es, en]) => ({ es, en }))); }
@@ -324,9 +339,9 @@
     W.slice(3, 5).forEach(w => easy.push(qListen(w, words)));
     W.slice(5, 7).forEach(w => easy.push(qMCrev(w, words)));
     mid.push(qMatch(sample(words, 5)));
-    sample(u.fill, 3).forEach(f => mid.push(qFill(f, u.L)));
+    sample(u.fill, 4).forEach(f => mid.push(qFill(f, u.L, undefined, u)));
     mid.push(qSentMC(ss[4] || ss[0], u.sents));
-    hard.push(qOrder(ss[0], u.sents, false), qOrder(ss[1], u.sents, false), qOrder(ss[2], u.sents, true));
+    hard.push(qOrder(ss[0], u.sents, false, u), qOrder(ss[1], u.sents, false, u), qOrder(ss[2], u.sents, true, u));
     W.slice(7, 9).forEach(w => hard.push(qType(w)));
     if (SR && S.settings.speak) hard.push(qSpeak(ss[3] || ss[0]));
     return [...shuffle(easy), ...shuffle(mid), ...shuffle(hard)];
@@ -337,8 +352,8 @@
     sample(words, 4).forEach(w => q.push(qMC(w, words)));
     sample(words, 2).forEach(w => q.push(qListen(w, words)));
     q.push(qMatch(sample(words, 5)));
-    sample(units.flatMap(u => u.fill.map(f => [f, u.L])), 3).forEach(([f, L]) => q.push(qFill(f, L)));
-    sample(sents, 2).forEach((s, i) => q.push(qOrder(s, sents, i === 1)));
+    sample(units.flatMap(u => u.fill.map(f => [f, u])), 4).forEach(([f, u]) => q.push(qFill(f, u.L, undefined, u)));
+    sample(units.flatMap(u => u.sents.map(s => [s, u])), 2).forEach(([s, u], i) => q.push(qOrder(s, sents, i === 1, u)));
     sample(words, 1).forEach(w => q.push(qType(w)));
     return shuffle(q);
   }
@@ -388,6 +403,7 @@
     if (q.first === undefined && q.scored !== false) {
       q.first = scoreOk; scoreOk ? s.right++ : s.wrong++;
       if (q.srs) srsGrade(q.srs, scoreOk);
+      if (q.mk) mistakeGrade(q.mk, scoreOk, s.opts.mistakeMode);
       s.opts.onAnswer && s.opts.onAnswer(q, scoreOk);
     }
     q.tries = (q.tries || 0) + 1;
@@ -401,7 +417,8 @@
       ${!res.ok && res.answer ? `<div class="ans">Correct answer: ${res.answer}</div>` : ''}
       ${res.ok && res.show ? `<div class="ans">${res.show}</div>` : ''}
       ${res.extra ? `<div class="ans muted small">${res.extra}</div>` : ''}
-      ${res.note ? `<div class="small" style="margin-top:4px">${res.note}</div>` : ''}</div>
+      ${res.note ? `<div class="small" style="margin-top:4px">${res.note}</div>` : ''}
+      <a class="small report" target="_blank" rel="noopener" href="${reportUrl('Exercise: ' + qSummary(q))}">⚑ Report a problem with this question</a></div>
       <div class="foot-row"><button class="btn ${res.ok ? 'ok' : 'bad'}" id="cont">Continue</button></div>`;
     $('#cont').onclick = nextQ;
     if (!res.ok) $('#qbody').classList.add('shake');
@@ -735,6 +752,7 @@
       w: `<div class="wordlist">${u.words.map(([es, en]) => wordRow({ es, en })).join('')}</div>`,
       s: `<div class="wordlist">${u.sents.map(([es, en]) => wordRow({ es, en })).join('')}</div>`
     };
+    view().insertAdjacentHTML('beforeend', `<p class="small" style="margin-top:18px"><a class="report" target="_blank" rel="noopener" href="${reportUrl('Lesson ' + u.id + ' · ' + u.title)}">⚑ Found a mistake in this lesson? Report it</a></p>`);
     const show = t => { $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); $('#tabc').innerHTML = panes[t]; };
     $$('#tabs button').forEach(b => b.onclick = () => show(b.dataset.t));
     show('g');
@@ -779,10 +797,12 @@
 
   /* ---------- practice hub ---------- */
   function practiceHub() {
-    const due = dueWords().length;
+    const due = dueWords().length, nMist = Object.keys(S.mistakes).length;
     view().innerHTML = head('Practice', 'Train every skill: vocabulary, grammar, listening, speaking and writing.') + `
       <div class="grid two">
         ${tile('#/review', '🧠', 'Spaced review', due ? `${due} words due now` : 'Keep your vocabulary fresh', due ? `<span class="badge" style="background:var(--primary)">${due}</span>` : '›')}
+        ${tile('#/mistakes', '📕', 'Mistake notebook', nMist ? `${nMist} item${nMist > 1 ? 's' : ''} to fix` : 'Wrong answers collect here', nMist ? `<span class="badge" style="background:var(--bad)">${nMist}</span>` : '›')}
+        ${tile('#/tutor', '✨', 'AI tutor', window.Tutor && Tutor.key ? 'Writing feedback & conversation' : 'Optional · uses your own Claude API key')}
         ${tile('#/drill', '🔁', 'Verb drills', `${VERBS.length} verbs · all tenses`)}
         ${tile('#/dictation', '✍️', 'Dictation', 'Listen and write full sentences')}
         ${tile('#/translate', '🔄', 'Translation', 'Write sentences in Spanish')}
@@ -1016,6 +1036,7 @@
       <details class="card" style="margin-bottom:12px"><summary style="cursor:pointer;font-weight:800">📄 Show model answer</summary>
         <p style="white-space:pre-line;margin-top:10px">${esc(w.model)}</p><button class="btn sm" data-say="${esc(w.model)}">🔊 Listen</button>
         <p class="muted small" style="white-space:pre-line;margin-top:10px">${esc(w.modelTr)}</p></details>
+      ${T() ? `<button class="btn block accent" id="aifb" style="margin-bottom:10px">✨ Get AI feedback on my text</button><div id="aiout" style="margin-bottom:14px"></div>` : ''}
       <button class="btn block ${st.done ? 'ghost' : 'ok'}" id="fin">${st.done ? '✓ Completed — update' : 'Mark as completed (+15 XP)'}</button>`;
     const txt = $('#txt'), wc = $('#wc');
     const count = () => { const n = (txt.value.match(/\S+/g) || []).length; wc.textContent = `${n} words`; wc.style.color = n >= w.words[0] ? 'var(--ok)' : ''; };
@@ -1023,6 +1044,12 @@
     count(); bindAccents(view(), txt);
     $$('[data-ins]').forEach(b => b.onclick = () => { const s = txt.selectionStart ?? txt.value.length; txt.value = txt.value.slice(0, s) + b.dataset.ins + ' ' + txt.value.slice(s); txt.focus(); txt.dispatchEvent(new Event('input')); });
     $$('[data-ck]').forEach(c => c.onchange = () => { st.checks[+c.dataset.ck] = c.checked; save(); });
+    const aib = $('#aifb');
+    if (aib) aib.onclick = () => {
+      if (!T().key) { $('#aiout').innerHTML = tutorSetupHtml(); return bindTutorSetup(() => { $('#aiout').innerHTML = ''; toast('Now tap the button again'); }); }
+      if ((txt.value.match(/\S+/g) || []).length < 10) return toast('Write a bit more first');
+      runCorrection(txt.value, w.level, w.prompt, $('#aiout'), aib);
+    };
     $('#fin').onclick = () => {
       st.text = txt.value;
       const n = (txt.value.match(/\S+/g) || []).length;
@@ -1054,8 +1081,8 @@
     const units = L.units, words = ALLWORDS.filter(w => w.level === lv), sents = sentsOf(lv);
     const qs = [];
     sample(words, 8).forEach((w, i) => qs.push(i % 2 ? qMCrev(w, words) : qMC(w, words)));
-    sample(units.flatMap(u => u.fill), 8).forEach(f => qs.push({ ...qFill(f, L), typed: false }));
-    sample(sents, 4).forEach(s => qs.push(qOrder(s, sents, false)));
+    sample(units.flatMap(u => u.fill.map(f => [f, u])), 8).forEach(([f, u]) => qs.push({ ...qFill(f, L, undefined, u), typed: false }));
+    sample(units.flatMap(u => u.sents.map(s => [s, u])), 4).forEach(([s, u]) => qs.push(qOrder(s, sents, false, u)));
     sample(sents, 4).forEach(s => qs.push(qListenSent(s, sents)));
     const r = rnd(READS.filter(x => x.level === lv));
     if (r) r.quiz.forEach(([q, a, o]) => qs.push({ type: 'mc', label: 'Reading · ' + r.title, passage: r.text.join('\n\n'), prompt: q, answer: a, options: o }));
@@ -1090,7 +1117,34 @@
   }
 
   /* ---------- library: reading, listening, grammar ---------- */
-  const libTabs = cur => tabsBar([['#/read', 'Reading'], ['#/listen', 'Listening'], ['#/grammar', 'Grammar']], cur);
+  const libTabs = cur => tabsBar([['#/read', 'Reading'], ['#/listen', 'Listening'], ['#/grammar', 'Grammar'], ['#/resources', 'Links']], cur);
+  const SPEEDS = [[0.6, '🐢 0.6×'], [0.8, '0.8×'], [0.95, '1×'], [1.15, '1.15×']];
+  const speedChips = () => `<div class="chips" id="speed">${SPEEDS.map(([v, l]) => `<button class="chip ${Math.abs(S.settings.rate - v) < 0.06 ? 'on' : ''}" data-rate="${v}">${l}</button>`).join('')}</div>`;
+  const bindSpeed = () => $$('[data-rate]').forEach(b => b.onclick = () => { S.settings.rate = +b.dataset.rate; save(); $$('[data-rate]').forEach(x => x.classList.toggle('on', x === b)); TTS.speak('Velocidad de lectura'); });
+  const RESOURCES = [
+    ['🎧 Listen to real speakers', [
+      ['Dreaming Spanish', 'https://www.dreamingspanish.com', 'A1–C1', 'Thousands of videos of natural Spanish sorted by difficulty — great for "comprehensible input".'],
+      ['Forvo', 'https://forvo.com/languages/es/', 'All', 'Hear almost any word pronounced by native speakers from different countries.'],
+      ['Coffee Break Spanish', 'https://coffeebreaklanguages.com/spanish/', 'A1–B1', 'Structured podcast lessons for beginners and intermediates.'],
+      ['Hoy Hablamos', 'https://www.hoyhablamos.com', 'B1–B2', 'Daily podcast in clear Spanish from Spain, with transcripts.'],
+      ['Españolistos', 'https://espanolistos.com', 'A2–B2', 'Conversational podcast in Latin American and Spanish Spanish.'],
+      ['Radio Ambulante', 'https://radioambulante.org', 'B2–C1', 'Award-winning Latin American storytelling podcast, with transcripts.'],
+      ['RTVE Play', 'https://www.rtve.es/play/', 'B1–C1', 'Spanish public TV and radio: news, series and documentaries, free online.']]],
+    ['📖 Read real texts', [
+      ['BBC Mundo', 'https://www.bbc.com/mundo', 'B1–C1', 'International news in neutral Latin American Spanish.'],
+      ['El País', 'https://elpais.com', 'B2–C1', 'Spain\'s leading newspaper.'],
+      ['Wikisource en español', 'https://es.wikisource.org', 'B2–C1', 'Free classic literature (where the app\'s public-domain texts come from).'],
+      ['Centro Virtual Cervantes', 'https://cvc.cervantes.es', 'All', 'Free resources from the Instituto Cervantes, including the official curriculum (PCIC).']]],
+    ['🔎 Look things up', [
+      ['Diccionario de la lengua española (RAE)', 'https://dle.rae.es', 'B1–C1', 'The official Spanish dictionary.'],
+      ['WordReference', 'https://www.wordreference.com/es/en/', 'All', 'Spanish–English dictionary with very active forums on usage.'],
+      ['Fundéu RAE', 'https://www.fundeu.es', 'B2–C1', 'Practical answers to doubts about correct Spanish.']]]
+  ];
+  function resourcesView() {
+    view().innerHTML = head('Library') + libTabs('#/resources') + `<p class="muted small">The app's audio uses your device's synthetic voice. To get used to real accents, speed and intonation, combine it with authentic material. These free resources are well known and reliable:</p>` +
+      RESOURCES.map(([t, items]) => `<div class="section-title">${t}</div><div class="grid two">${items.map(([n, u, lv, d]) =>
+        `<a class="card row" href="${u}" target="_blank" rel="noopener"><div class="grow"><b>${esc(n)}</b> <span class="pill small">${lv}</span><div class="muted small">${esc(d)}</div></div><span>↗</span></a>`).join('')}</div>`).join('');
+  }
   let readLevel = 'all';
   function readList() {
     view().innerHTML = head('Library') + libTabs('#/read') + `<p class="muted small">${READS.length} graded texts and classic literature with audio, translations and quizzes.</p>
@@ -1119,17 +1173,20 @@
       <div class="row" style="margin-bottom:12px;flex-wrap:wrap">
         <button class="btn sm" id="play">▶ Listen</button>
         <label class="row small" style="gap:8px"><span class="switch"><input type="checkbox" id="trans"><span></span></span>English translation</label>
+        ${speedChips()}
       </div>
       <p class="muted small">Tap any word to hear it (and see its meaning when available).</p>
       <div class="card reader">${r.text.map((p, i) => `<div class="para" data-p="${i}"><p class="${r.poem ? 'poem' : ''}" style="white-space:pre-line">${wrap(p)}</p>
         <div class="trans hidden" style="white-space:pre-line">${esc(r.tr[i] || '')}</div>
         <button class="speak" data-say="${esc(p)}" aria-label="Listen to paragraph" style="margin-top:6px">🔊</button></div>`).join('')}</div>
       ${r.source ? `<p class="muted small">Source: ${esc(r.source)}</p>` : ''}
+      <p class="small"><a class="report" target="_blank" rel="noopener" href="${reportUrl('Reading ' + r.id + ' · ' + r.title)}">⚑ Report a mistake in this text</a></p>
       <div class="section-title">Key vocabulary</div><div class="wordlist">${r.gloss.map(([es, en]) => wordRow({ es, en })).join('')}</div>
       <div class="card stack" style="margin-top:18px;text-align:center"><b>Check your understanding</b>
         <div class="muted small">${r.quiz.length} questions${d ? ` · best score ${Math.round(d.best * 100)}%` : ''}</div>
         <a class="btn block" href="#/quiz/${r.id}">Start quiz</a></div>`;
     $('#trans').onchange = e => $$('.trans').forEach(t => t.classList.toggle('hidden', !e.target.checked));
+    bindSpeed();
     $$('.reader .w').forEach(el => el.onclick = () => {
       TTS.speak(el.textContent);
       $$('.w.hl').forEach(x => x.classList.remove('hl')); el.classList.add('hl');
@@ -1181,6 +1238,7 @@
         <button class="btn sm" id="play">▶ Play dialogue</button>
         <label class="row small" style="gap:8px"><span class="switch"><input type="checkbox" id="showtxt" ${d ? 'checked' : ''}><span></span></span>Show text</label>
         <label class="row small" style="gap:8px"><span class="switch"><input type="checkbox" id="trans"><span></span></span>Translation</label>
+        ${speedChips()}
       </div>
       <div class="chat ${d ? '' : 'blur'}" id="chat">${dl.lines.map(([sp, es, en], i) => `<div class="bubble ${sp === 'A' ? 'left' : 'right'}" data-i="${i}">
         <div class="who">${esc(dl.speakers[sp])}</div><div class="es">${esc(es)}</div><div class="en trans hidden">${esc(en)}</div>
@@ -1189,6 +1247,7 @@
         <div class="muted small">${dl.quiz.length} questions${d ? ` · best ${Math.round(d.best * 100)}%` : ''}</div>
         <a class="btn block" href="#/dquiz/${id}">Start quiz</a></div>`;
     $('#showtxt').onchange = e => $('#chat').classList.toggle('blur', !e.target.checked);
+    bindSpeed();
     $('#trans').onchange = e => $$('.trans').forEach(t => t.classList.toggle('hidden', !e.target.checked));
     const items = dl.lines.map(([sp, es], i) => ({ text: es, i, gap: 250, ...voiceFor(sp) }));
     let playing = false; const play = $('#play');
@@ -1299,6 +1358,161 @@
     });
   }
 
+  /* ---------- mistake notebook ---------- */
+  function mistakeQuestion(k) {
+    const [t, a, b, c] = k.split('|');
+    if (t === 'f' || t === 'o') {
+      const u = UNITS[a], i = +b; if (!u) return null;
+      if (t === 'f') return u.fill[i] ? { ...qFill(u.fill[i], u.L, undefined, u), typed: false } : null;
+      return u.sents[i] ? qOrder(u.sents[i], u.sents, false, u) : null;
+    }
+    if (t === 'c' && VERB[a]) return qConj(VERB[a], b, +c);
+    return null;
+  }
+  function mistakesView(mode) {
+    const keys = Object.keys(S.mistakes).filter(k => mistakeQuestion(k));
+    if (mode === 'go') {
+      if (!keys.length) return go('#/mistakes');
+      const pick = keys.sort((x, y) => S.mistakes[y].n - S.mistakes[x].n).slice(0, 15);
+      return startSession({
+        exit: '#/mistakes', mistakeMode: true, questions: shuffle(pick.map(mistakeQuestion)),
+        onFinish: st => { const xp = 5 + st.right; addXP(xp); showResult({ emoji: '📕', title: 'Mistakes reviewed!', sub: `${Object.keys(S.mistakes).length} items left in your notebook`, xp, acc: st.acc, actions: [{ label: 'Done', go: '#/mistakes' }] }); }
+      });
+    }
+    const label = k => { const [t, a, b, c] = k.split('|'); if (t === 'c') return `🔁 ${a} — ${TENSE[b] ? TENSE[b].en : b}`; const u = UNITS[a]; return `${t === 'f' ? '✏️' : '🧩'} ${esc(t === 'f' ? u.fill[+b][0] : u.sents[+b][0])}`; };
+    view().innerHTML = head('Mistake notebook', 'Grammar, sentence and verb questions you got wrong. Answer each one right twice to clear it.', '#/practice') + `
+      <div class="card stack" style="text-align:center"><div style="font-size:3rem">${keys.length ? '📕' : '🌟'}</div>
+        <h2>${keys.length ? `${keys.length} item${keys.length > 1 ? 's' : ''} to fix` : 'No mistakes to review'}</h2>
+        ${keys.length ? '<a class="btn block" href="#/mistakes/go">Review my mistakes</a>' : '<p class="muted">Wrong answers from lessons, practice, verb drills and exams will appear here.</p>'}</div>
+      ${keys.length ? `<div class="section-title">In your notebook</div><div class="stack">${keys.slice(0, 60).map(k => `<div class="card row small"><div class="grow">${label(k)}</div><span class="muted">×${S.mistakes[k].n}</span></div>`).join('')}</div>` : ''}`;
+  }
+
+  /* ---------- AI tutor (optional, user's own Claude API key) ---------- */
+  const T = () => window.Tutor;
+  function tutorSetupHtml() {
+    return `<div class="card stack"><b>🔑 Connect your Claude API key</b>
+      <p class="small muted" style="margin:0">The AI tutor uses Anthropic's Claude models. You need your own API key from <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener" style="text-decoration:underline">platform.claude.com</a>; usage is billed to your Anthropic account (a writing correction or a short chat usually costs a few cents with Opus, less with Sonnet or Haiku).</p>
+      <p class="small muted" style="margin:0">Your key is stored <b>only on this device</b> and sent <b>only to api.anthropic.com</b>. It is never included in progress exports. Don't use the tutor on a shared device.</p>
+      <input class="search" id="aikey" type="password" autocomplete="off" placeholder="sk-ant-…" value="">
+      <button class="btn block" id="savekey">Save key</button></div>`;
+  }
+  function bindTutorSetup(after) {
+    const b = $('#savekey'); if (!b) return;
+    b.onclick = () => { const k = $('#aikey').value.trim(); if (!/^sk-ant-/.test(k)) return toast('That doesn\'t look like an Anthropic API key (sk-ant-…)'); T().setKey(k); toast('Key saved on this device ✓'); after(); };
+  }
+  function tutorView() {
+    if (!T()) return go('#/practice');
+    if (!T().key) { view().innerHTML = head('AI tutor', 'Personal feedback on your writing and real conversations.', '#/practice') + tutorSetupHtml(); return bindTutorSetup(route); }
+    view().innerHTML = head('AI tutor', 'Personal feedback on your writing and real conversations.', '#/practice') + `
+      <div class="grid two">
+        ${tile('#/aiwrite', '📝', 'Correct my writing', 'Paste or write a text and get detailed corrections')}
+        ${tile('#/aichat', '💬', 'Conversation practice', `${T().SCENARIOS.length} role-plays from A1 to C1, with voice`)}
+      </div>
+      <div class="section-title">Tutor settings</div>
+      <div class="card">
+        <div class="setting"><div><b>Model</b><div class="muted small">Opus gives the best feedback; Sonnet and Haiku are faster and cheaper</div></div>
+          <select id="aimodel">${T().MODELS.map(m => `<option value="${m.id}" ${T().model === m.id ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></div>
+        <div class="setting"><div><b>API key</b><div class="muted small">Stored on this device only</div></div><button class="btn sm bad" id="forget">Remove key</button></div>
+      </div>`;
+    $('#aimodel').onchange = e => { T().setModel(e.target.value); toast('Model updated'); };
+    $('#forget').onclick = () => confirmBox('Remove your API key?', 'The tutor will stop working until you add a key again.', 'Remove', () => { T().forget(); route(); });
+  }
+  function correctionHtml(r) {
+    return `<div class="card stack">
+      <div class="row between"><b>Score: ${r.score}/10</b><span class="pill">Estimated level: ${esc(r.estimated_level)}</span></div>
+      <p style="margin:0">${esc(r.summary)}</p></div>
+      <div class="section-title">Corrected text</div>
+      <div class="card"><p style="white-space:pre-line;margin-top:0">${esc(r.corrected_text)}</p><button class="btn sm" data-say="${esc(r.corrected_text)}">🔊 Listen</button></div>
+      ${r.errors.length ? `<div class="section-title">Corrections (${r.errors.length})</div><div class="stack">${r.errors.map(e => `<div class="card">
+        <div><s style="color:var(--bad-dark)">${esc(e.original)}</s> → <b style="color:var(--ok-dark)">${esc(e.correction)}</b> <span class="pill small">${esc(e.type)}</span></div>
+        <div class="muted small" style="margin-top:4px">${esc(e.explanation)}</div></div>`).join('')}</div>` : '<p class="muted">No errors found — ¡enhorabuena!</p>'}
+      ${r.strengths.length ? `<div class="section-title">What you did well</div><div class="card"><ul style="margin:0;padding-left:20px">${r.strengths.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+      ${r.next_steps.length ? `<div class="section-title">Practise next</div><div class="card"><ul style="margin:0;padding-left:20px">${r.next_steps.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}`;
+  }
+  async function runCorrection(text, level, task, out, btn) {
+    btn.disabled = true; const label = btn.textContent; btn.textContent = '⏳ Reviewing…';
+    out.innerHTML = '<p class="muted">Your tutor is reading your text…</p>';
+    try { const r = await T().correct(text, { level, task }); out.innerHTML = correctionHtml(r); addXP(10); }
+    catch (e) { out.innerHTML = `<div class="card" style="border-color:var(--bad)"><b>⚠️ ${esc(e.message)}</b></div>`; }
+    btn.disabled = false; btn.textContent = label;
+  }
+  function aiWriteView() {
+    if (!T() || !T().key) return go('#/tutor');
+    view().innerHTML = head('Correct my writing', 'Write anything in Spanish — an email, a story, your diary — and get it corrected.', '#/tutor') + `
+      <div style="margin-bottom:10px">${chipsHtml(ORDER.map(l => [l, LV[l].name]), curLevel())}</div>
+      <textarea class="text-in" id="txt" rows="9" lang="es" spellcheck="true" placeholder="Escribe aquí tu texto…">${esc(sessionStorage.getItem('pap_aiwrite') || '')}</textarea>${accentBar()}
+      <button class="btn block" id="go" style="margin-top:12px">✨ Correct my text</button><div id="out" style="margin-top:16px"></div>`;
+    let lv = curLevel();
+    $$('[data-l]').forEach(b => b.onclick = () => { lv = b.dataset.l; $$('[data-l]').forEach(x => x.classList.toggle('on', x === b)); });
+    const txt = $('#txt'); bindAccents(view(), txt);
+    txt.oninput = () => { try { sessionStorage.setItem('pap_aiwrite', txt.value); } catch (e) { } };
+    $('#go').onclick = () => { const t = txt.value.trim(); if ((t.match(/\S+/g) || []).length < 3) return toast('Write a few words first'); runCorrection(t, lv, '', $('#out'), $('#go')); };
+  }
+  function aiChatList() {
+    if (!T() || !T().key) return go('#/tutor');
+    view().innerHTML = head('Conversation practice', 'Chat by voice or text with an AI partner. It replies at your level and gently corrects you.', '#/tutor') + LEVELS.map(L => {
+      const sc = T().SCENARIOS.filter(x => x.level === L.id); if (!sc.length) return '';
+      return `<div class="section-title">${lvBadge(L)} ${esc(L.title)}</div><div class="grid two">${sc.map(x => tile('#/chat/' + x.id, x.icon, esc(x.title), esc(x.goal))).join('')}</div>`;
+    }).join('') + `<div class="section-title">Any level</div><div class="grid two">${T().SCENARIOS.filter(x => x.level === 'any').map(x => tile('#/chat/' + x.id, x.icon, esc(x.title), esc(x.goal))).join('')}</div>`;
+  }
+  const chats = {};
+  function chatView(id) {
+    if (!T() || !T().key) return go('#/tutor');
+    const sc = T().SCENARIOS.find(x => x.id === id); if (!sc) return go('#/aichat');
+    const st = chats[id] || (chats[id] = { level: sc.level === 'any' ? curLevel() : sc.level, turns: [], speak: true });
+    const splitTip = t => { const i = t.indexOf('💡'); return i < 0 ? [t.trim(), ''] : [t.slice(0, i).trim(), t.slice(i).trim()]; };
+    const bubble = (role, text) => {
+      if (role === 'user') return `<div class="bubble right"><div class="who">You</div><div class="es">${esc(text)}</div></div>`;
+      const [say, tip] = splitTip(text);
+      return `<div class="bubble left"><div class="who">${esc(sc.title)}</div><div class="es">${esc(say)}</div>${tip ? `<div class="tipline">${esc(tip)}</div>` : ''}<button class="speak" data-say="${esc(say)}">🔊</button></div>`;
+    };
+    view().innerHTML = `<div class="page-head">${backBtn('#/aichat')}<div class="grow"><div class="muted small">AI conversation · ${LV[st.level].name}</div><h1>${sc.icon} ${esc(sc.title)}</h1><div class="muted small">${esc(sc.goal)}</div></div></div>
+      <div class="row" style="margin-bottom:10px;flex-wrap:wrap;gap:12px">${chipsHtml(ORDER.map(l => [l, LV[l].name]), st.level)}
+        <label class="row small" style="gap:8px"><span class="switch"><input type="checkbox" id="autospk" ${st.speak ? 'checked' : ''}><span></span></span>Read replies aloud</label>
+        <button class="btn sm ghost" id="restart">↺ Restart</button></div>
+      <div class="chat" id="chatlog">${bubble('assistant', sc.opener)}${st.turns.map(t => bubble(t.role, t.content)).join('')}</div>
+      <div class="chatbar"><textarea class="text-in" id="msg" rows="2" lang="es" placeholder="Escribe tu respuesta…"></textarea>
+        <div class="row" style="margin-top:8px">${SR ? '<button class="btn sm accent" id="mic">🎤 Speak</button>' : ''}<button class="btn sm grow" id="send">Send</button></div>${accentBar()}</div>`;
+    const log = $('#chatlog'), msg = $('#msg');
+    const scrollEnd = () => window.scrollTo(0, document.body.scrollHeight);
+    if (!st.turns.length && st.speak) TTS.speak(sc.opener);
+    scrollEnd();
+    bindAccents(view(), msg);
+    $$('[data-l]').forEach(b => b.onclick = () => { st.level = b.dataset.l; $$('[data-l]').forEach(x => x.classList.toggle('on', x === b)); });
+    $('#autospk').onchange = e => { st.speak = e.target.checked; };
+    $('#restart').onclick = () => { st.turns = []; route(); };
+    let busy = false;
+    const send = async () => {
+      const text = msg.value.trim(); if (!text || busy) return;
+      busy = true; $('#send').disabled = true;
+      st.turns.push({ role: 'user', content: text }); msg.value = '';
+      log.insertAdjacentHTML('beforeend', bubble('user', text) + `<div class="bubble left" id="pending"><div class="who">${esc(sc.title)}</div><div class="es">…</div></div>`);
+      scrollEnd();
+      try {
+        const reply = await T().chat(sc, st.level, st.turns.slice(), partial => { const p = $('#pending .es'); if (p) p.textContent = splitTip(partial)[0] || '…'; });
+        st.turns.push({ role: 'assistant', content: reply });
+        $('#pending').outerHTML = bubble('assistant', reply);
+        if (st.speak) TTS.speak(splitTip(reply)[0]);
+        addXP(2);
+      } catch (e) {
+        st.turns.pop();
+        $('#pending').outerHTML = `<div class="bubble left" style="border-color:var(--bad)"><div class="es">⚠️ ${esc(e.message)}</div></div>`;
+        msg.value = text;
+      }
+      busy = false; $('#send').disabled = false; scrollEnd();
+    };
+    $('#send').onclick = send;
+    msg.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+    const mic = $('#mic');
+    if (mic) mic.onclick = () => {
+      const r = new SR(); r.lang = 'es-ES'; r.interimResults = false;
+      r.onresult = e => { msg.value = (msg.value ? msg.value + ' ' : '') + e.results[0][0].transcript; };
+      r.onerror = e => toast(e.error === 'not-allowed' ? 'Microphone permission denied' : 'Could not hear you');
+      r.onend = () => { mic.textContent = '🎤 Speak'; };
+      TTS.stop(); r.start(); mic.textContent = '● Listening…';
+    };
+  }
+
   /* ---------- profile ---------- */
   function badges() {
     const L = learned().length, lessons = Object.keys(S.done).filter(k => UNITS[k]).length;
@@ -1396,9 +1610,10 @@
     write: id => id ? writeView(id) : writeList(), exams: examsView, exam: examView, examgo: examStart, cert: certView, placement: placementStart,
     read: readList, reading: readingView, quiz: quizStart, listen: listenList, dialogue: dialogueView, dquiz: dquizStart, grammar: grammarView,
     words: dictView, decks: decksView, deck: deckView, study: id => deckSession(id, 'study'), deckq: id => deckSession(id, 'practice'), verbs: verbsView, verb: verbView,
+    mistakes: mistakesView, resources: resourcesView, tutor: tutorView, aiwrite: aiWriteView, aichat: aiChatList, chat: chatView,
     me: profileView
   };
-  const NAV = { learn: ['', 'level', 'unit', 'lesson', 'mix'], library: ['read', 'reading', 'quiz', 'listen', 'dialogue', 'dquiz', 'grammar'], words: ['words', 'decks', 'deck', 'study', 'deckq', 'verbs', 'verb'], me: ['me'] };
+  const NAV = { learn: ['', 'level', 'unit', 'lesson', 'mix'], library: ['read', 'reading', 'quiz', 'listen', 'dialogue', 'dquiz', 'grammar', 'resources'], words: ['words', 'decks', 'deck', 'study', 'deckq', 'verbs', 'verb'], me: ['me'] };
   const navOf = p => Object.keys(NAV).find(k => NAV[k].includes(p)) || 'practice';
   function route() {
     TTS.stop(); closeModal(); sess = null;
